@@ -19,9 +19,17 @@ Seven new integration tests cover independent per-file CRDTs and awareness, conv
 
 These checks used the local Mac mini; they do not claim a physical second-device Wi-Fi test or Safari validation.
 
+## Drag-first UI follow-up
+
+The idle host now shows only the brand, a file-and-tray illustration and one drop hint. It accepts drops anywhere in the idle window, highlights while dragging, and opens the file picker when the target is clicked or activated with Enter/Space. Separate file/folder buttons and promotional copy have been removed; the empty sidebar stays hidden until sharing begins.
+
+Verified the actual Electron main/preload path with filesystem-backed drag events for two files and a folder, invalid-file recovery, keyboard picker fallback, stop/reset, and the 680 × 560 minimum window size. `npm test` still reports 59 passed, 0 failed and the same one metadata skip. The host screenshots below reflect this follow-up; guest screenshots are from the initial feature verification.
+
 ## Screenshots
 
 ![Host idle](screenshots/host-idle.png)
+
+![Drop highlight](screenshots/host-drag-active.png)
 
 ![Guest preview](screenshots/guest-preview.png)
 

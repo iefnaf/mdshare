@@ -44,7 +44,6 @@ export function guestHtml ({ manifest, session, nonce }) {
   <div class="brand"><img src="/assets/${escapeHtml(manifest.logo)}" alt="" width="40" height="40"><span>mdshare</span></div>
   <div class="sidebar-heading">Shared files <span>${session.files.length}</span></div>
   <nav id="files" aria-label="Files">${session.files.map((file, i) => `<button type="button" class="file" data-file="${escapeHtml(file.id)}" aria-current="${i === 0 ? 'page' : 'false'}"><span class="file-icon" aria-hidden="true">▤</span><span>${escapeHtml(file.name)}</span></button>`).join('')}</nav>
-  <p class="sidebar-foot"><span class="presence-dot"></span> One link. Write together.</p>
 </aside>
 <div class="workspace">
 <header class="bar">
