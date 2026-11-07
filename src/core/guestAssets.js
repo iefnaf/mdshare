@@ -41,10 +41,15 @@ export function guestHtml ({ manifest, session, nonce }) {
 <body>
 <header class="bar">
   <span class="name">${title}</span>
+  <div id="view-toggle" class="toggle" role="group" aria-label="View">
+    <button id="view-source" type="button" data-view="source" aria-pressed="true">Source</button>
+    <button id="view-preview" type="button" data-view="preview" aria-pressed="false">Preview</button>
+  </div>
   <span id="status" class="status" role="status">Connecting…</span>
 </header>
 <div id="banner" class="banner" hidden></div>
 <main id="editor" class="editor" aria-label="Markdown editor"></main>
+<article id="preview" class="preview" hidden aria-label="Markdown preview"></article>
 <div id="ended" class="ended" hidden><div class="card"><h1 id="ended-title"></h1><p id="ended-text"></p></div></div>
 <script src="/assets/${escapeHtml(manifest.js)}"></script>
 </body>

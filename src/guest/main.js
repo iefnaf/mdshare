@@ -10,6 +10,9 @@ import { markdown } from '@codemirror/lang-markdown'
 import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language'
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next'
 import { TEXT_KEY, CLOSE, MSG_FROZEN } from '../core/protocol.js'
+import { livePreview } from './preview.js'
+
+const VIEW_KEY = 'mdshare-view' // sessionStorage only: per tab, gone when the tab closes
 
 const $ = id => document.getElementById(id)
 const meta = name => document.querySelector(`meta[name="${name}"]`)?.content ?? ''
@@ -30,6 +33,8 @@ function ended (kind) {
   $('ended-text').textContent = text
   $('ended').hidden = false
   $('editor').hidden = true
+  $('preview').hidden = true
+  $('view-toggle').hidden = true
   $('banner').hidden = true
   $('status').textContent = 'Ended'
 }
@@ -50,6 +55,32 @@ function main () {
 
   let view = null
   let frozen = false
+
+  // Source / Preview. The editor (and yCollab) stays mounted in both modes; only
+  // visibility changes, so sync, awareness and freeze handling are unaffected.
+  const preview = livePreview($('preview'), ytext)
+  let mode = 'source'
+  const setMode = next => {
+    mode = next === 'preview' ? 'preview' : 'source'
+    $('editor').hidden = mode !== 'source'
+    $('preview').hidden = mode !== 'preview'
+    for (const b of $('view-toggle').querySelectorAll('button')) {
+      b.setAttribute('aria-pressed', String(b.dataset.view === mode))
+    }
+    preview.setVisible(mode === 'preview')
+    try { sessionStorage.setItem(VIEW_KEY, mode) } catch {} // storage may be disabled
+    if (mode === 'source' && view) {
+      view.requestMeasure() // it was display:none; layout may be stale
+      view.focus()
+    }
+  }
+  $('view-toggle').addEventListener('click', e => {
+    const b = e.target.closest('button[data-view]')
+    if (b) setMode(b.dataset.view)
+  })
+  let saved = null
+  try { saved = sessionStorage.getItem(VIEW_KEY) } catch {}
+  setMode(saved)
   const editable = new Compartment()
   const canEdit = () => provider.wsconnected && provider.synced && !frozen
 
@@ -94,7 +125,7 @@ function main () {
           ]
         })
       })
-      view.focus()
+      if (mode === 'source') view.focus()
     }
     refresh()
   })
@@ -103,6 +134,7 @@ function main () {
     // Terminal close: drop everything held in this tab.
     provider.destroy()
     provider.awareness.destroy()
+    preview.destroy()
     view?.destroy()
     doc.destroy()
     ended(code)

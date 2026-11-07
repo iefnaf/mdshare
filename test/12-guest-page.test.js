@@ -44,6 +44,25 @@ test('GET / serves the editor shell with matching CSP nonce', opts, async () => 
   assert.notEqual(again.body.match(/name="mdshare-nonce" content="([^"]+)"/)?.[1], nonce, 'nonce per request')
 })
 
+test('page has Source | Preview toggle and a hidden preview pane', opts, async () => {
+  const { body } = await get(ctx.port, '/')
+  assert.match(body, /<div id="view-toggle"[^>]*role="group"/)
+  assert.match(body, /<button id="view-source"[^>]*data-view="source"[^>]*aria-pressed="true"/)
+  assert.match(body, /<button id="view-preview"[^>]*data-view="preview"[^>]*aria-pressed="false"/)
+  assert.match(body, /<article id="preview" class="preview" hidden/)
+  assert.ok(body.indexOf('id="editor"') < body.indexOf('id="preview"'), 'editor stays the default pane')
+})
+
+test('bundle: preview is sanitized, view choice is per-tab only', opts, async () => {
+  const { body: js } = await get(ctx.port, `/assets/${manifest.js}`)
+  // DOMPurify's public API names survive minification; marked passes raw HTML through,
+  // so a bundle without the sanitizer would be an XSS hole.
+  assert.ok(js.includes('addHook') && js.includes('sanitize'), 'DOMPurify is bundled')
+  assert.ok(js.includes('mdshare-view'), 'view mode key present')
+  assert.ok(js.includes('sessionStorage'))
+  assert.ok(!/indexedDB\.open/.test(js), 'still no IndexedDB')
+})
+
 test('hashed assets resolve with correct types; unknown names 404', opts, async () => {
   const js = await get(ctx.port, `/assets/${manifest.js}`)
   assert.equal(js.status, 200)
