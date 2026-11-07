@@ -2,7 +2,7 @@
   "name": "mdshare",
   "version": "0.0.1",
   "private": true,
-  "description": "Share one local Markdown file for realtime collaborative editing on the LAN",
+  "description": "Share local Markdown files and folders for realtime collaborative editing on the LAN",
   "type": "module",
   "main": "src/electron/main.js",
   "scripts": {

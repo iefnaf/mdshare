@@ -19,7 +19,7 @@ const meta = name => document.querySelector(`meta[name="${name}"]`)?.content ?? 
 
 const TERMINAL = new Set([CLOSE.STOPPED, CLOSE.STALE_EPOCH, CLOSE.TOO_LARGE_DOC])
 const ENDED = {
-  [CLOSE.STOPPED]: ['Sharing stopped', 'The host stopped sharing this document. Your edits up to this point were saved on their computer.'],
+  [CLOSE.STOPPED]: ['Sharing stopped', 'The host stopped this session. If editing was paused by a conflict, unsaved changes may not have reached disk.'],
   [CLOSE.STALE_EPOCH]: ['This copy is out of date', 'The host reloaded the document. Reload this page to keep editing the current version.'],
   [CLOSE.TOO_LARGE_DOC]: ['Document too large', 'The last change would make the document larger than 2 MB, so it was not applied.'],
   missing: ['Link incomplete', 'This link is missing its access key. Ask the host for the full link or scan the QR code again.']
@@ -39,7 +39,31 @@ function ended (kind) {
   $('status').textContent = 'Ended'
 }
 
-function main () {
+let disposeCurrent = () => {}
+let setCurrentMode = () => {}
+let mode = 'source'
+try { mode = sessionStorage.getItem(VIEW_KEY) === 'preview' ? 'preview' : 'source' } catch {}
+const name = `Guest ${Math.floor(Math.random() * 90 + 10)}`
+const color = COLORS[Math.floor(Math.random() * COLORS.length)]
+
+$('view-toggle').addEventListener('click', e => {
+  const button = e.target.closest('button[data-view]')
+  if (button) setCurrentMode(button.dataset.view)
+})
+$('files').addEventListener('click', e => {
+  const button = e.target.closest('button[data-file]')
+  if (button && button.getAttribute('aria-current') !== 'page') openFile(button)
+})
+
+function openFile (button) {
+  disposeCurrent()
+  $('editor').replaceChildren()
+  $('preview').replaceChildren()
+  $('banner').hidden = true
+  $('status').textContent = 'Connecting…'
+  $('filename').textContent = button.lastElementChild.textContent
+  for (const item of $('files').querySelectorAll('button')) item.setAttribute('aria-current', item === button ? 'page' : 'false')
+
   const token = new URLSearchParams(location.hash.slice(1)).get('t')
   const epoch = meta('mdshare-epoch')
   if (!token || !epoch) return ended('missing')
@@ -47,7 +71,7 @@ function main () {
   const doc = new Y.Doc()
   const ytext = doc.getText(TEXT_KEY)
   const provider = new WebsocketProvider(`ws://${location.host}`, 'ws', doc, {
-    params: { e: epoch, t: token },
+    params: { e: epoch, t: token, f: button.dataset.file },
     disableBc: true,
     resyncInterval: -1,
     shouldReconnect: ev => !TERMINAL.has(ev?.code)
@@ -59,8 +83,7 @@ function main () {
   // Source / Preview. The editor (and yCollab) stays mounted in both modes; only
   // visibility changes, so sync, awareness and freeze handling are unaffected.
   const preview = livePreview($('preview'), ytext)
-  let mode = 'source'
-  const setMode = next => {
+  const setMode = setCurrentMode = next => {
     mode = next === 'preview' ? 'preview' : 'source'
     $('editor').hidden = mode !== 'source'
     $('preview').hidden = mode !== 'preview'
@@ -74,13 +97,7 @@ function main () {
       view.focus()
     }
   }
-  $('view-toggle').addEventListener('click', e => {
-    const b = e.target.closest('button[data-view]')
-    if (b) setMode(b.dataset.view)
-  })
-  let saved = null
-  try { saved = sessionStorage.getItem(VIEW_KEY) } catch {}
-  setMode(saved)
+  setMode(mode)
   const editable = new Compartment()
   const canEdit = () => provider.wsconnected && provider.synced && !frozen
 
@@ -91,7 +108,7 @@ function main () {
     $('status').textContent = frozen ? 'Read-only' : on ? 'Connected' : 'Reconnecting…'
     $('banner').hidden = !frozen && on
     $('banner').textContent = frozen
-      ? 'The file was changed on the host computer. Editing is paused until the host decides which version to keep.'
+      ? 'A shared file changed on the host computer, or could not be saved. Editing is paused for this session. Copy any unsaved text before the host restarts sharing.'
       : 'Connection lost. Reconnecting… (edits are paused)'
   }
 
@@ -100,14 +117,12 @@ function main () {
     refresh()
   }
 
-  const name = `Guest ${Math.floor(Math.random() * 90 + 10)}`
-  const color = COLORS[Math.floor(Math.random() * COLORS.length)]
   provider.awareness.setLocalStateField('user', { name, color, colorLight: color + '33' })
 
   provider.on('status', refresh)
   provider.on('sync', isSynced => {
     if (isSynced && !view) {
-      const undoManager = new Y.UndoManager(ytext)
+      undoManager = new Y.UndoManager(ytext)
       view = new EditorView({
         parent: $('editor'),
         state: EditorState.create({
@@ -130,15 +145,24 @@ function main () {
     refresh()
   })
 
-  provider.on('closed', ({ code }) => {
-    // Terminal close: drop everything held in this tab.
+  let disposed = false
+  let undoManager
+  disposeCurrent = () => {
+    if (disposed) return
+    disposed = true
+    provider.off('status', refresh)
     provider.destroy()
     provider.awareness.destroy()
     preview.destroy()
     view?.destroy()
     doc.destroy()
+    undoManager?.destroy()
+  }
+  provider.on('closed', ({ code }) => {
+    disposeCurrent()
     ended(code)
+    for (const item of $('files').querySelectorAll('button')) item.disabled = true
   })
 }
 
-main()
+openFile($('files').querySelector('button'))

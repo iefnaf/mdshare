@@ -1,5 +1,5 @@
 // Electron main process: one window, one Host. Closing the app stops sharing.
-import { app, BrowserWindow, ipcMain, dialog, clipboard } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, clipboard, nativeImage } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs/promises'
 import { execFile } from 'node:child_process'
@@ -13,7 +13,7 @@ import { shareUrls } from './shareUrls.js'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const appRoot = app.getAppPath()
 const UI_FILE = path.join(here, '../host-ui/index.html')
-const MD_EXT = new Set(['.md', '.markdown', '.mdown', '.mkd'])
+const ICON = path.join(here, '../assets/logo-e.png')
 
 let win = null
 let host = null
@@ -64,10 +64,11 @@ async function shareInfo () {
   const s = host.session
   if (!s) return { sharing: false }
   const urls = shareUrls({ port: host.port, token: s.editToken, localHostName, hosts: lanHosts(host.port, localHostName) })
-  if (!urls.primary) return { sharing: false, error: 'No network connection. Connect to Wi-Fi and try again.' }
+  if (!urls.primary) return { sharing: true, basename: s.title, files: s.files, frozen: s.frozen, error: 'No network connection. Connect to Wi-Fi and restart sharing.' }
   return {
     sharing: true,
-    basename: host.store.basename,
+    basename: s.title,
+    files: s.files,
     port: host.port,
     url: urls.primary,
     ipUrl: urls.ip,
@@ -77,13 +78,9 @@ async function shareInfo () {
   }
 }
 
-async function shareFile (filePath) {
-  if (typeof filePath !== 'string' || !path.isAbsolute(filePath)) throw new Error('Not a file path')
-  if (!MD_EXT.has(path.extname(filePath).toLowerCase())) {
-    return send({ sharing: false, error: 'Only Markdown files (.md) can be shared.' })
-  }
+async function sharePaths (paths) {
   try {
-    const session = await host.shareFile(filePath)
+    const session = await host.sharePaths(paths)
     session.on('frozen', async () => send(await shareInfo()))
     session.on('stopped', () => send({ sharing: false }))
     send(await shareInfo())
@@ -95,7 +92,7 @@ async function shareFile (filePath) {
       NOT_FILE: 'That is not a regular file.'
     }
     const msg = err instanceof FileError ? messages[err.code] ?? err.message : `Couldn’t open the file: ${err.message}`
-    send({ sharing: false, error: msg })
+    send({ ...await shareInfo(), error: msg })
   }
 }
 
@@ -113,10 +110,12 @@ function handle (channel, fn) {
 
 function createWindow () {
   win = new BrowserWindow({
-    width: 520,
-    height: 640,
-    minWidth: 420,
-    minHeight: 520,
+    width: 920,
+    height: 700,
+    minWidth: 680,
+    minHeight: 560,
+    backgroundColor: '#faf9f6',
+    icon: ICON,
     title: 'mdshare',
     show: false,
     webPreferences: {
@@ -136,6 +135,7 @@ function createWindow () {
 }
 
 app.whenReady().then(async () => {
+  app.dock?.setIcon(nativeImage.createFromPath(ICON))
   localHostName = await getLocalHostName()
   host = new Host({
     backupRoot: path.join(app.getPath('userData'), 'backups'),
@@ -144,17 +144,24 @@ app.whenReady().then(async () => {
   })
   await listen()
 
-  handle('share:pick', async () => {
+  // Serialize mutations even if more than one IPC caller sends a request.
+  let mutations = Promise.resolve()
+  const mutate = fn => {
+    const next = mutations.then(fn)
+    mutations = next.catch(() => {})
+    return next
+  }
+  handle('share:pick', async (folder = false) => {
     const res = await dialog.showOpenDialog(win, {
-      title: 'Choose a Markdown file to share',
-      properties: ['openFile'],
-      filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] }]
+      title: folder ? 'Choose a folder to share' : 'Choose Markdown files to share',
+      properties: folder ? ['openDirectory'] : ['openFile', 'multiSelections'],
+      ...(folder ? {} : { filters: [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown', 'mkd'] }] })
     })
-    if (!res.canceled && res.filePaths[0]) await shareFile(res.filePaths[0])
+    if (!res.canceled && res.filePaths.length) await mutate(() => sharePaths(res.filePaths))
     return lastState
   })
-  handle('share:path', async p => { await shareFile(p); return lastState })
-  handle('share:stop', async () => { await host.stopSharing(); send({ sharing: false }); return lastState })
+  handle('share:paths', paths => mutate(async () => { await sharePaths(paths); return lastState }))
+  handle('share:stop', () => mutate(async () => { await host.stopSharing(); send({ sharing: false }); return lastState }))
   handle('share:info', async () => (host.session ? shareInfo() : lastState))
   handle('share:copy', text => clipboard.writeText(String(text)))
 

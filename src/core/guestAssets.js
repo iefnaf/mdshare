@@ -4,16 +4,16 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { escapeHtml } from './SyncServer.js'
 
-const TYPES = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' }
+const TYPES = { '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png' }
 
 /**
  * @param {string} dir  directory containing manifest.json and the hashed files it names
- * @returns {{assets: Map<string,{type:string,body:Buffer}>, renderIndex: Function, manifest: {js:string, css:string}}}
+ * @returns {{assets: Map<string,{type:string,body:Buffer}>, renderIndex: Function, manifest: {js:string, css:string, logo:string}}}
  */
 export function loadGuestAssets (dir) {
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'))
   const assets = new Map()
-  for (const name of [manifest.js, manifest.css]) {
+  for (const name of [manifest.js, manifest.css, manifest.logo]) {
     if (path.basename(name) !== name) throw new Error(`bad asset name in manifest: ${name}`)
     assets.set(name, { type: TYPES[path.extname(name)], body: fs.readFileSync(path.join(dir, name)) })
   }
@@ -36,11 +36,19 @@ export function guestHtml ({ manifest, session, nonce }) {
 <meta name="mdshare-epoch" content="${escapeHtml(session.epoch)}">
 <meta name="mdshare-nonce" content="${escapeHtml(nonce)}">
 <title>${title}</title>
+<link rel="icon" href="/assets/${escapeHtml(manifest.logo)}">
 <link rel="stylesheet" href="/assets/${escapeHtml(manifest.css)}">
 </head>
 <body>
+<aside class="sidebar" aria-label="Shared files">
+  <div class="brand"><img src="/assets/${escapeHtml(manifest.logo)}" alt="" width="40" height="40"><span>mdshare</span></div>
+  <div class="sidebar-heading">Shared files <span>${session.files.length}</span></div>
+  <nav id="files" aria-label="Files">${session.files.map((file, i) => `<button type="button" class="file" data-file="${escapeHtml(file.id)}" aria-current="${i === 0 ? 'page' : 'false'}"><span class="file-icon" aria-hidden="true">▤</span><span>${escapeHtml(file.name)}</span></button>`).join('')}</nav>
+  <p class="sidebar-foot"><span class="presence-dot"></span> One link. Write together.</p>
+</aside>
+<div class="workspace">
 <header class="bar">
-  <span class="name">${title}</span>
+  <span id="filename" class="name">${escapeHtml(session.files[0].name)}</span>
   <div id="view-toggle" class="toggle" role="group" aria-label="View">
     <button id="view-source" type="button" data-view="source" aria-pressed="true">Source</button>
     <button id="view-preview" type="button" data-view="preview" aria-pressed="false">Preview</button>
@@ -50,6 +58,7 @@ export function guestHtml ({ manifest, session, nonce }) {
 <div id="banner" class="banner" hidden></div>
 <main id="editor" class="editor" aria-label="Markdown editor"></main>
 <article id="preview" class="preview" hidden aria-label="Markdown preview"></article>
+</div>
 <div id="ended" class="ended" hidden><div class="card"><h1 id="ended-title"></h1><p id="ended-text"></p></div></div>
 <script src="/assets/${escapeHtml(manifest.js)}"></script>
 </body>

@@ -1,11 +1,13 @@
-// Composition of the headless core: one file, one session, one server.
-// The Electron main process (later) only calls shareFile()/stopSharing().
+// Composition: one session and server, independent stores and CRDTs per file.
 import os from 'node:os'
+import fs from 'node:fs/promises'
 import { ShareSession } from './ShareSession.js'
 import { SyncServer } from './SyncServer.js'
-import { FileStore } from './FileStore.js'
+import { FileStore, decodeMarkdown } from './FileStore.js'
+import { TEXT_KEY } from './protocol.js'
 import { Watcher } from './Watcher.js'
 import { loadGuestAssets } from './guestAssets.js'
+import { collectShareFiles, MAX_SHARE_BYTES } from './shareFiles.js'
 
 /** "ip:port" for each non-internal IPv4 interface, plus "<LocalHostName>.local:port" (G4). */
 export function lanHosts (port, localHostName = os.hostname()) {
@@ -41,6 +43,7 @@ export class Host {
     this.session = null
     this.store = null
     this.watcher = null
+    this.entries = []
   }
 
   async listen (port = 0, bindHost = '0.0.0.0') {
@@ -50,31 +53,62 @@ export class Host {
   }
 
   async shareFile (filePath) {
-    await this.stopSharing()
-    const store = await FileStore.open(filePath, { backupRoot: this.backupRoot, debounceMs: this.debounceMs })
-    const session = ShareSession.start(store.text)
-    session.title = store.basename
-    const watcher = new Watcher(store).start()
+    return this.sharePaths([filePath])
+  }
 
-    const attachDoc = () => {
-      session.doc.on('update', () => store.scheduleSave(session.text))
+  async sharePaths (paths) {
+    // Validate the entire selection before ending a working share. Opening stores
+    // happens after the old share flushes, so overlapping files seed fresh bytes.
+    const selection = await collectShareFiles(paths)
+    for (const file of selection) {
+      decodeMarkdown(await fs.readFile(file.path))
     }
-    attachDoc()
-    session.on('epoch', attachDoc)
-    store.on('conflict', e => session.freeze({ source: 'save', ...e }))
-    watcher.on('external-change', e => session.freeze({ source: 'watch', ...e }))
-
-    this.server.setSession(session)
-    Object.assign(this, { session, store, watcher })
-    return session
+    await this.stopSharing()
+    const entries = []
+    let session
+    try {
+      let total = 0
+      for (const file of selection) {
+        const store = await FileStore.open(file.path, { backupRoot: this.backupRoot, debounceMs: this.debounceMs })
+        total += store.lastKnown.size
+        if (total > MAX_SHARE_BYTES) throw new Error('Selection grew beyond 20 MB. Choose fewer files.')
+        entries.push({ ...file, store, watcher: new Watcher(store) })
+      }
+      session = ShareSession.start(entries.map(e => ({ name: e.name, text: e.store.text })))
+      session.title = entries.length === 1 ? entries[0].name : `${entries.length} shared files`
+      const attachDocs = () => entries.forEach((entry, i) => {
+        const resource = session.documents.get(session.files[i].id)
+        const text = resource.doc.getText(TEXT_KEY)
+        text.observe(() => { if (!session.frozen) entry.store.scheduleSave(text.toString()) })
+      })
+      attachDocs()
+      session.on('epoch', attachDocs)
+      entries.forEach(entry => {
+        const freeze = e => session.freeze({ file: entry.name, ...e })
+        entry.store.on('conflict', e => freeze({ source: 'save', ...e }))
+        entry.store.on('error', e => freeze({ source: 'save', reason: e.message }))
+        entry.watcher.on('external-change', e => freeze({ source: 'watch', ...e }))
+        entry.watcher.on('error', e => freeze({ source: 'watch', reason: e.message }))
+        entry.watcher.start()
+      })
+      this.server.setSession(session)
+      Object.assign(this, { session, entries, store: entries[0].store, watcher: entries[0].watcher })
+      return session
+    } catch (error) {
+      for (const entry of entries) entry.watcher.stop()
+      session?.stop()
+      throw error
+    }
   }
 
   async stopSharing () {
     if (!this.session) return
-    this.watcher.stop()
-    await this.store.flush()
+    for (const entry of this.entries) entry.watcher.stop()
+    // Close editing before awaiting disk IO, otherwise edits can arrive after flush.
     this.session.stop()
     this.server.setSession(null)
+    await Promise.all(this.entries.map(entry => entry.store.flush()))
+    this.entries = []
     this.session = this.store = this.watcher = null
   }
 

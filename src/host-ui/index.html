@@ -2,43 +2,45 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
 <title>mdshare</title>
 <link rel="stylesheet" href="host.css">
 </head>
 <body>
+<aside class="sidebar">
+  <div class="brand"><img src="../assets/logo-e.png" alt="" width="44" height="44"><span>mdshare</span></div>
+  <p class="sidebar-label">YOUR WORKSPACE</p>
+  <div class="sidebar-current"><span aria-hidden="true">▤</span> Shared files <span id="file-count">0</span></div>
+  <ul id="file-list" aria-label="Shared files"><li class="empty-list">Your files will appear here.</li></ul>
+  <p class="sidebar-foot">A little space to<br>write together.</p>
+</aside>
 <main>
+  <header class="topbar"><span>Local workspace</span><span id="session-status" class="status">Ready to share</span></header>
+  <p id="error" class="error" role="alert" hidden></p>
   <section id="idle" class="view">
-    <div id="drop" class="drop" tabindex="0" role="button" aria-label="Drop a Markdown file here, or press Enter to choose one">
-      <div class="drop-icon" aria-hidden="true">⬇︎</div>
-      <p class="drop-title">Drop a Markdown file here</p>
-      <p class="drop-sub">or <button id="pick" class="link" type="button">choose a file…</button></p>
+    <div id="drop" class="drop">
+      <img class="hero-logo" src="../assets/logo-e.png" alt="mdshare constellation" width="112" height="112">
+      <h1>A few notes.<br>A shared space.</h1>
+      <p class="subtitle">Bring your Markdown files together.<br>One link, everyone on the same page.</p>
+      <div class="actions"><button id="pick" class="primary" type="button">Choose files…</button><button id="pick-folder" type="button">Choose folder…</button></div>
+      <p class="drop-hint">or drop files or a folder anywhere here</p>
     </div>
-    <p id="error" class="error" role="alert" hidden></p>
+    <p class="footnote">Stays on your computer. Shared on your Wi-Fi.</p>
   </section>
-
   <section id="sharing" class="view" hidden>
-    <p class="label">Sharing</p>
-    <h1 id="basename" class="basename"></h1>
-
-    <div id="frozen" class="frozen" role="alert" hidden>
-      <strong>The file was changed outside mdshare.</strong>
-      Editing is paused for everyone and nothing has been overwritten. Choosing which version to keep is coming in a later version — for now, stop sharing and share the file again.
+    <div class="sharing-heading"><p class="eyebrow">ALL SET</p><h1>Your space is open.</h1><p id="basename" class="subtitle"></p></div>
+    <div id="frozen" class="frozen" role="alert" hidden><strong>Editing is paused.</strong> A file changed outside mdshare or could not be saved. Copy unsaved text from the browser before stopping and sharing again.</div>
+    <div id="connection" class="connection">
+      <img id="qr" class="qr" alt="QR code for the share link">
+      <div class="connection-copy"><h2>Invite someone in</h2><p>On the same Wi-Fi, scan this code<br>or open the link below.</p><span class="pill">● Live collaboration</span></div>
     </div>
-
-    <img id="qr" class="qr" alt="QR code for the share link">
-    <p class="hint">On the same Wi-Fi, scan the code or open:</p>
-    <div class="url-row">
-      <code id="url" class="url"></code>
-      <button id="copy" type="button">Copy</button>
+    <div id="link-area" class="link-area">
+      <label class="label">SHARE LINK</label>
+      <div class="url-row"><code id="url" class="url"></code><button id="copy" type="button">Copy link</button></div>
+      <p id="ip-row" class="ip" hidden>If that doesn’t open, try <code id="ip-url"></code></p>
     </div>
-    <p id="ip-row" class="ip" hidden>If that doesn’t open, try <code id="ip-url"></code></p>
-
-    <button id="stop" class="stop" type="button">Stop sharing</button>
-
-    <p class="disclosure">
-      Sharing uses unencrypted HTTP. Anyone on this Wi-Fi could read the document and the link. Use only on networks you trust.
-    </p>
+    <div class="sharing-footer"><span>Edits save to the original files.</span><button id="stop" class="stop" type="button">Stop sharing</button></div>
+    <p class="disclosure">Sharing uses unencrypted HTTP. Anyone on this Wi-Fi could read the documents and the link. Use only on networks you trust.</p>
   </section>
 </main>
 <script src="host.js"></script>

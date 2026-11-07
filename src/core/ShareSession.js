@@ -1,4 +1,4 @@
-// One share of one file. Owns the authoritative Y.Doc for the current epoch.
+// One share, one token and epoch, with an independent Y.Doc per file.
 //
 // Lifecycle (PLAN: Decisions):
 //   ShareSession.start(text)  -> new epoch + new editToken, server seeds the doc (G1)
@@ -15,7 +15,7 @@ export { TEXT_KEY }
 const newId = () => randomBytes(16).toString('base64url') // 128-bit
 
 export class ShareSession extends EventEmitter {
-  /** @param {string} text  initial content (already normalized to \n) */
+  /** @param {string | Array<{name:string,text:string}>} text initial normalized content */
   static start (text) {
     return new ShareSession(text, newId())
   }
@@ -30,11 +30,21 @@ export class ShareSession extends EventEmitter {
   #newEpoch (text) {
     this.epoch = newId()
     this.frozen = false
-    this.doc = new Y.Doc()
-    // Server-side seeding only: clients never insert initial content (G1).
-    if (text) this.doc.getText(TEXT_KEY).insert(0, text)
-    this.awareness = new Awareness(this.doc)
-    this.awareness.setLocalState(null) // the server itself has no presence
+    const files = Array.isArray(text) ? text : [{ name: this.files?.[0]?.name ?? 'Shared document', text }]
+    if (!files.length) throw new Error('A share needs at least one file')
+    this.documents = new Map(files.map(file => {
+      const id = newId()
+      const doc = new Y.Doc()
+      // Only the server seeds content; each file has its own CRDT and presence.
+      if (file.text) doc.getText(TEXT_KEY).insert(0, file.text)
+      const awareness = new Awareness(doc)
+      awareness.setLocalState(null)
+      return [id, { id, name: file.name, doc, awareness }]
+    }))
+    this.files = [...this.documents.values()].map(({ id, name }) => ({ id, name }))
+    const first = this.documents.values().next().value
+    this.doc = first.doc
+    this.awareness = first.awareness
   }
 
   get text () {
@@ -61,6 +71,7 @@ export class ShareSession extends EventEmitter {
 
   /** Start a fresh epoch from new disk text, keeping the link valid. */
   reload (text) {
+    if (this.files.length > 1) throw new Error('Restart sharing to reload a multi-file session')
     const old = { doc: this.doc, awareness: this.awareness, epoch: this.epoch }
     this.#newEpoch(text)
     this.emit('epoch', old)
@@ -72,7 +83,9 @@ export class ShareSession extends EventEmitter {
     if (this.stopped) return
     this.stopped = true
     this.emit('stopped')
-    this.awareness.destroy()
-    this.doc.destroy()
+    for (const { doc, awareness } of this.documents.values()) {
+      awareness.destroy()
+      doc.destroy()
+    }
   }
 }

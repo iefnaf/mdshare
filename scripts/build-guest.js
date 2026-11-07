@@ -23,11 +23,13 @@ const result = await esbuild.build({
 })
 const js = Buffer.from(result.outputFiles[0].contents)
 const css = await fs.readFile(path.join(root, 'src/guest/guest.css'))
+const logo = await fs.readFile(path.join(root, 'src/assets/logo-e.png'))
 
 await fs.rm(out, { recursive: true, force: true })
 await fs.mkdir(out, { recursive: true })
-const manifest = { js: `guest-${hash(js)}.js`, css: `guest-${hash(css)}.css` }
+const manifest = { js: `guest-${hash(js)}.js`, css: `guest-${hash(css)}.css`, logo: `logo-e-${hash(logo)}.png` }
 await fs.writeFile(path.join(out, manifest.js), js)
 await fs.writeFile(path.join(out, manifest.css), css)
+await fs.writeFile(path.join(out, manifest.logo), logo)
 await fs.writeFile(path.join(out, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n')
 console.log(`guest bundle: ${manifest.js} (${(js.length / 1024).toFixed(0)} KB), ${manifest.css}`)
