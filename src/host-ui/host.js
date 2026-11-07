@@ -7,6 +7,7 @@ let currentState = { sharing: false }
 function render (state) {
   currentState = state
   const sharing = Boolean(state?.sharing)
+  document.body.classList.toggle('is-sharing', sharing)
   $('idle').hidden = sharing
   $('sharing').hidden = !sharing
   $('error').hidden = !state?.error
@@ -34,6 +35,8 @@ function render (state) {
 async function run (fn) {
   if (busy) return
   busy = true
+  $('drop').setAttribute('aria-busy', 'true')
+  $('drop-hint').textContent = 'Opening…'
   for (const button of document.querySelectorAll('button')) button.disabled = true
   try {
     render(await fn())
@@ -41,25 +44,51 @@ async function run (fn) {
     render({ ...currentState, error: String(err?.message ?? err) })
   } finally {
     busy = false
+    $('drop').setAttribute('aria-busy', 'false')
+    $('drop-hint').textContent = 'Drop Markdown files or a folder'
     for (const button of document.querySelectorAll('button')) button.disabled = false
   }
 }
 
-// Never let a drop anywhere navigate the window to the file.
-for (const type of ['dragover', 'drop']) {
-  window.addEventListener(type, e => e.preventDefault())
-}
-
+// The entire idle window accepts a drop. Track nested drag events so crossing
+// the illustration or label does not flicker the active target.
 const drop = $('drop')
-drop.addEventListener('dragenter', () => drop.classList.add('over'))
-drop.addEventListener('dragleave', () => drop.classList.remove('over'))
-drop.addEventListener('drop', e => {
+let dragDepth = 0
+const acceptsDrop = () => !currentState.sharing && !busy
+const resetDrag = () => {
+  dragDepth = 0
   drop.classList.remove('over')
+}
+window.addEventListener('dragenter', e => {
+  e.preventDefault()
+  if (!acceptsDrop() || !e.dataTransfer?.types.includes('Files')) return
+  dragDepth++
+  drop.classList.add('over')
+})
+window.addEventListener('dragover', e => {
+  e.preventDefault() // never navigate to a dropped file
+  if (e.dataTransfer) e.dataTransfer.dropEffect = acceptsDrop() ? 'copy' : 'none'
+})
+window.addEventListener('dragleave', () => {
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (!dragDepth) drop.classList.remove('over')
+})
+window.addEventListener('dragend', resetDrag)
+window.addEventListener('drop', e => {
+  e.preventDefault()
+  resetDrag()
+  if (!acceptsDrop()) return
   const files = [...(e.dataTransfer?.files ?? [])]
   if (files.length) run(() => api.shareDropped(files))
 })
-$('pick').addEventListener('click', e => { e.stopPropagation(); run(api.pick) })
-$('pick-folder').addEventListener('click', () => run(api.pickFolder))
+// A quiet fallback for keyboard users and people who prefer a file dialog.
+drop.addEventListener('click', () => run(api.pick))
+drop.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault()
+    run(api.pick)
+  }
+})
 $('stop').addEventListener('click', () => run(api.stop))
 $('copy').addEventListener('click', async () => {
   await api.copy($('url').textContent)

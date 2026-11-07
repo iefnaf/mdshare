@@ -9,37 +9,37 @@
 <body>
 <aside class="sidebar">
   <div class="brand"><img src="../assets/logo-e.png" alt="" width="44" height="44"><span>mdshare</span></div>
-  <p class="sidebar-label">YOUR WORKSPACE</p>
   <div class="sidebar-current"><span aria-hidden="true">▤</span> Shared files <span id="file-count">0</span></div>
-  <ul id="file-list" aria-label="Shared files"><li class="empty-list">Your files will appear here.</li></ul>
-  <p class="sidebar-foot">A little space to<br>write together.</p>
+  <ul id="file-list" aria-label="Shared files"></ul>
 </aside>
 <main>
-  <header class="topbar"><span>Local workspace</span><span id="session-status" class="status">Ready to share</span></header>
+  <header class="topbar"><span id="session-status" class="status">Ready to share</span></header>
   <p id="error" class="error" role="alert" hidden></p>
   <section id="idle" class="view">
-    <div id="drop" class="drop">
-      <img class="hero-logo" src="../assets/logo-e.png" alt="mdshare constellation" width="112" height="112">
-      <h1>A few notes.<br>A shared space.</h1>
-      <p class="subtitle">Bring your Markdown files together.<br>One link, everyone on the same page.</p>
-      <div class="actions"><button id="pick" class="primary" type="button">Choose files…</button><button id="pick-folder" type="button">Choose folder…</button></div>
-      <p class="drop-hint">or drop files or a folder anywhere here</p>
+    <div id="drop" class="drop" role="button" tabindex="0" aria-label="Drop Markdown files or a folder here, or click to choose files" aria-busy="false">
+      <svg class="drop-icon" width="160" height="152" viewBox="0 0 160 152" fill="none" aria-hidden="true">
+        <rect class="back-sheet" x="40" y="20" width="66" height="84" rx="9" transform="rotate(-12 40 20)" />
+        <path class="front-sheet" d="M62 16h32l24 24v62a8 8 0 0 1-8 8H62a8 8 0 0 1-8-8V24a8 8 0 0 1 8-8Z" />
+        <path class="sheet-fold" d="M94 16v18a6 6 0 0 0 6 6h18" />
+        <path class="sheet-line" d="M69 53h33M69 64h23" />
+        <path class="drop-arrow" d="M86 80v44m-13-13 13 13 13-13" />
+        <path class="drop-tray" d="M31 118v13a8 8 0 0 0 8 8h94a8 8 0 0 0 8-8v-13" />
+      </svg>
+      <p id="drop-hint" class="drop-hint">Drop Markdown files or a folder</p>
     </div>
-    <p class="footnote">Stays on your computer. Shared on your Wi-Fi.</p>
   </section>
   <section id="sharing" class="view" hidden>
-    <div class="sharing-heading"><p class="eyebrow">ALL SET</p><h1>Your space is open.</h1><p id="basename" class="subtitle"></p></div>
+    <div class="sharing-heading"><h1 id="basename"></h1></div>
     <div id="frozen" class="frozen" role="alert" hidden><strong>Editing is paused.</strong> A file changed outside mdshare or could not be saved. Copy unsaved text from the browser before stopping and sharing again.</div>
     <div id="connection" class="connection">
       <img id="qr" class="qr" alt="QR code for the share link">
-      <div class="connection-copy"><h2>Invite someone in</h2><p>On the same Wi-Fi, scan this code<br>or open the link below.</p><span class="pill">● Live collaboration</span></div>
+      <p class="connection-copy">Scan on the same Wi-Fi</p>
     </div>
     <div id="link-area" class="link-area">
-      <label class="label">SHARE LINK</label>
       <div class="url-row"><code id="url" class="url"></code><button id="copy" type="button">Copy link</button></div>
       <p id="ip-row" class="ip" hidden>If that doesn’t open, try <code id="ip-url"></code></p>
     </div>
-    <div class="sharing-footer"><span>Edits save to the original files.</span><button id="stop" class="stop" type="button">Stop sharing</button></div>
+    <div class="sharing-footer"><button id="stop" class="stop" type="button">Stop sharing</button></div>
     <p class="disclosure">Sharing uses unencrypted HTTP. Anyone on this Wi-Fi could read the documents and the link. Use only on networks you trust.</p>
   </section>
 </main>

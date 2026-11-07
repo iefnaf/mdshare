@@ -10,48 +10,50 @@ button:disabled { opacity: .5; cursor: wait; }
 .sidebar { width: 232px; flex: none; padding: 27px 16px 20px; background: #f0f1ee; display: flex; flex-direction: column; }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; font-size: 19px; font-weight: 650; letter-spacing: -.5px; }
 .brand img { border-radius: 12px; }
-.sidebar-label { margin: 40px 12px 12px; font-size: 10px; letter-spacing: 1.4px; color: var(--muted); }
-.sidebar-current { background: #e3e9eb; padding: 11px 12px; border-radius: 8px; display: flex; align-items: center; gap: 10px; font-weight: 550; }
+.sidebar-current { margin-top: 40px; background: #e3e9eb; padding: 11px 12px; border-radius: 8px; display: flex; align-items: center; gap: 10px; font-weight: 550; }
 .sidebar-current > :first-child { color: #6488a1; font-size: 19px; }
 #file-count { margin-left: auto; font-size: 12px; color: var(--muted); }
 #file-list { list-style: none; margin: 12px 0; padding: 0; overflow: auto; flex: 1; }
 #file-list li { padding: 9px 12px; overflow-wrap: anywhere; font-size: 12px; color: #686e68; }
-#file-list .empty-list { color: #94978f; }
-.sidebar-foot { padding: 0 12px; color: #90958c; font-size: 12px; }
 main { flex: 1; min-width: 0; padding: 28px 40px 24px; display: flex; flex-direction: column; overflow: auto; }
-.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }
+.topbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; color: var(--muted); font-size: 12px; }
 .status { color: #6a8072; font-size: 11px; }
 .status::before { content: '●'; margin-right: 6px; color: #9ab09e; font-size: 8px; }
 .view { flex: 1; display: flex; flex-direction: column; }
-.drop { flex: 1; padding: 30px 0; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 18px; text-align: center; transition: background .15s; }
-.drop.over { background: #eaf0ed; outline: 2px dashed #b2c5bc; outline-offset: -8px; }
-.hero-logo { border-radius: 26px; margin-bottom: 24px; }
+.drop { flex: 1; min-height: 300px; margin: 16px 0 0; padding: 36px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1.5px dashed #d9dfd7; border-radius: 20px; text-align: center; cursor: pointer; transition: background .15s, border-color .15s; }
+.drop:hover { background: #f8f9f5; }
+.drop:focus-visible { outline: 2px solid #7c9fbc; outline-offset: 5px; }
+.drop-icon { margin-bottom: 24px; overflow: visible; transition: transform .18s; }
+.back-sheet { fill: #e5ebe3; stroke: #c2cdbf; stroke-width: 1.5; }
+.front-sheet { fill: #fdfcf9; stroke: #a8b9c2; stroke-width: 1.5; }
+.sheet-fold, .sheet-line { stroke: #a8b9c2; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.drop-arrow { stroke: #70929f; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.drop-tray { stroke: #a1b3a1; stroke-width: 2; stroke-linecap: round; }
+.drop-hint { margin: 0; font-size: 16px; color: #6e7b70; }
+.drop[aria-busy="true"] { cursor: progress; opacity: .65; }
+body:not(.is-sharing) .sidebar { position: absolute; inset: 0 auto auto 0; width: auto; padding: 26px 32px; background: transparent; }
+body:not(.is-sharing) .sidebar-current, body:not(.is-sharing) #file-list, body:not(.is-sharing) .topbar { display: none; }
+body:not(.is-sharing) main { padding: 100px 40px 40px; }
+body:not(.is-sharing) .error { margin-top: 0; }
+.drop.over { background: #edf3ec; border-color: #95af98; }
+.drop.over .drop-icon { transform: translateY(6px); }
 h1 { font-size: 32px; line-height: 1.2; letter-spacing: -1.15px; font-weight: 600; margin: 0 0 16px; }
-.subtitle { color: var(--muted); margin: 0; line-height: 1.7; overflow-wrap: anywhere; }
-.actions { display: flex; gap: 10px; margin-top: 28px; }
-.primary { background: #dfe8ed; color: #3f6076; }
-.drop-hint, .footnote { color: #90948c; font-size: 11px; }
-.drop-hint { margin-top: 17px; }
-.footnote { text-align: center; }
 .error, .frozen { border-radius: 9px; padding: 12px 15px; background: #f7eddf; color: #826144; font-size: 12px; }
 .frozen { margin: 18px 0 0; }
 .frozen strong { display: block; }
 .sharing-heading { margin-top: 45px; }
-.eyebrow, .label { color: var(--muted); font-size: 10px; letter-spacing: 1.3px; }
-.eyebrow { color: #809287; margin-bottom: 12px; }
-.sharing-heading h1 { font-size: 29px; margin-bottom: 10px; }
-.connection { display: flex; align-items: center; gap: 26px; margin: 27px 0; }
-.qr { width: 148px; height: 148px; border-radius: 12px; padding: 8px; background: white; }
-.connection-copy h2 { font-size: 15px; font-weight: 600; margin: 0 0 8px; }
-.connection-copy p { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
-.pill { color: #6a8771; background: #edf2eb; border-radius: 5px; padding: 4px 7px; font-size: 10px; }
+.sharing-heading h1 { font-size: 25px; margin-bottom: 10px; overflow-wrap: anywhere; }
+.connection { display: flex; flex-direction: column; align-items: center; gap: 14px; margin: 28px 0; }
+.connection-copy { margin: 0; color: var(--muted); font-size: 12px; }
+.qr { width: 180px; height: 180px; border-radius: 12px; padding: 8px; background: white; }
 .url-row { display: flex; gap: 10px; align-items: center; margin-top: 7px; border-radius: 9px; padding: 6px 6px 6px 12px; background: #f1f2ef; }
 .url { flex: 1; min-width: 0; }
 .url, .ip code { font: 11px/1.6 ui-monospace, Menlo, monospace; overflow-wrap: anywhere; user-select: all; }
 .url-row button { flex: none; padding: 8px 10px; background: var(--bg); font-size: 12px; }
 .ip { font-size: 10px; color: var(--muted); margin-top: 12px; }
-.sharing-footer { margin-top: 24px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.sharing-footer span { color: var(--muted); font-size: 11px; }
+.sharing-footer { margin-top: 24px; display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
 .stop { background: #f4e9e4; color: #9b6d60; font-size: 12px; }
 .disclosure { margin: auto 0 0; padding-top: 26px; color: #93958e; font-size: 10px; line-height: 1.6; }
 @media (max-width: 760px) { .sidebar { width: 190px; } main { padding: 24px; } .connection { gap: 16px; } .qr { width: 120px; height: 120px; } }
+
+@media (prefers-reduced-motion: reduce) { .drop, .drop-icon { transition: none; } }
