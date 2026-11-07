@@ -5,6 +5,7 @@ import { ShareSession } from './ShareSession.js'
 import { SyncServer } from './SyncServer.js'
 import { FileStore } from './FileStore.js'
 import { Watcher } from './Watcher.js'
+import { loadGuestAssets } from './guestAssets.js'
 
 /** "ip:port" for each non-internal IPv4 interface, plus "<LocalHostName>.local:port" (G4). */
 export function lanHosts (port, localHostName = os.hostname()) {
@@ -21,13 +22,22 @@ export function lanHosts (port, localHostName = os.hostname()) {
 
 export class Host {
   /**
-   * @param {{backupRoot: string, allowedHosts?: (port:number)=>string[], debounceMs?: number}} opts
+   * @param {object} opts
+   * @param {string} opts.backupRoot
+   * @param {(port:number)=>string[]} [opts.allowedHosts]
+   * @param {number} [opts.debounceMs]
+   * @param {string} [opts.guestDir]  built guest bundle (dist/guest); omitted in headless tests
    */
-  constructor ({ backupRoot, allowedHosts = lanHosts, debounceMs }) {
+  constructor ({ backupRoot, allowedHosts = port => lanHosts(port), debounceMs, guestDir }) {
     this.backupRoot = backupRoot
     this.debounceMs = debounceMs
     this.port = 0
-    this.server = new SyncServer({ allowedHosts: () => allowedHosts(this.port) })
+    const guest = guestDir ? loadGuestAssets(guestDir) : {}
+    this.server = new SyncServer({
+      allowedHosts: () => allowedHosts(this.port),
+      assets: guest.assets,
+      renderIndex: guest.renderIndex
+    })
     this.session = null
     this.store = null
     this.watcher = null

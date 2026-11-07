@@ -8,7 +8,8 @@ import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import { Host } from '../src/core/Host.js'
 import { TEXT_KEY } from '../src/core/ShareSession.js'
-import { CLOSE } from '../src/core/SyncServer.js'
+import * as decoding from 'lib0/decoding'
+import { CLOSE, MSG_FROZEN } from '../src/core/SyncServer.js'
 
 const TERMINAL_CODES = new Set([CLOSE.STOPPED, CLOSE.STALE_EPOCH, CLOSE.TOO_LARGE_DOC])
 
@@ -17,14 +18,15 @@ export async function tmpDir () {
 }
 
 /** A Host bound to loopback whose only allowed Host header is 127.0.0.1:<port>. */
-export async function startHost ({ content = '# Hello\n\nworld\n', name = 'doc.md', debounceMs = 50 } = {}) {
+export async function startHost ({ content = '# Hello\n\nworld\n', name = 'doc.md', debounceMs = 50, guestDir } = {}) {
   const dir = await tmpDir()
   const file = path.join(dir, name)
   await fs.writeFile(file, content)
   const host = new Host({
     backupRoot: path.join(dir, 'backups'),
     allowedHosts: port => [`127.0.0.1:${port}`],
-    debounceMs
+    debounceMs,
+    guestDir
   })
   const { port } = await host.listen(0, '127.0.0.1')
   const session = await host.shareFile(file)
@@ -60,6 +62,7 @@ export function client (ctx, { epoch = ctx.host.session.epoch, token = ctx.host.
     provider,
     text: doc.getText(TEXT_KEY),
     closes,
+    frozen: false,
     // provider.destroy() clears its own timers but NOT the Awareness it created,
     // whose 3s outdated-check setInterval keeps the event loop (and node:test) alive.
     closed: false,
@@ -71,6 +74,8 @@ export function client (ctx, { epoch = ctx.host.session.epoch, token = ctx.host.
       doc.destroy()
     }
   }
+  // Same extension point the guest page uses (src/guest/main.js).
+  provider.messageHandlers[MSG_FROZEN] = (_enc, dec) => { c.frozen = decoding.readVarUint(dec) === 1 }
   return c
 }
 

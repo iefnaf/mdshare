@@ -4,18 +4,30 @@
   "private": true,
   "description": "Share one local Markdown file for realtime collaborative editing on the LAN",
   "type": "module",
+  "main": "src/electron/main.js",
   "scripts": {
+    "build:guest": "node scripts/build-guest.js",
+    "start": "npm run build:guest && electron .",
+    "pretest": "npm run build:guest",
     "test": "node scripts/test-electron.js",
     "test:node": "MDSHARE_ALLOW_SYSTEM_NODE=1 node --test --test-concurrency=1 'test/*.test.js'"
   },
   "dependencies": {
     "lib0": "^0.2.0",
+    "qrcode": "^1.5.4",
     "ws": "^8.0.0",
     "y-protocols": "^1.0.0",
     "yjs": "^13.0.0"
   },
   "devDependencies": {
-    "electron": "*",
-    "y-websocket": "*"
+    "@codemirror/commands": "^6.0.0",
+    "@codemirror/lang-markdown": "^6.0.0",
+    "@codemirror/language": "^6.0.0",
+    "@codemirror/state": "^6.0.0",
+    "@codemirror/view": "^6.0.0",
+    "electron": "^45.2.3",
+    "esbuild": ">=0.25.0",
+    "y-codemirror.next": "^0.3.5",
+    "y-websocket": "^3.1.0"
   }
 }

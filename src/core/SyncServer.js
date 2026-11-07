@@ -2,6 +2,7 @@
 // Speaks the y-protocols sync + awareness wire format (compatible with y-websocket clients),
 // with our own gates for Host, Origin, token, capacity, epoch, size and freeze.
 import http from 'node:http'
+import { randomBytes } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import { WebSocketServer } from 'ws'
 import * as Y from 'yjs'
@@ -9,16 +10,9 @@ import * as encoding from 'lib0/encoding'
 import * as decoding from 'lib0/decoding'
 import * as syncProtocol from 'y-protocols/sync'
 import * as awarenessProtocol from 'y-protocols/awareness'
-import { TEXT_KEY } from './ShareSession.js'
+import { TEXT_KEY, MSG_SYNC, MSG_AWARENESS, MSG_FROZEN, CLOSE } from './protocol.js'
 
-export const MSG_SYNC = 0
-export const MSG_AWARENESS = 1
-
-export const CLOSE = Object.freeze({
-  STOPPED: 4000, // host stopped sharing
-  STALE_EPOCH: 4001, // client belongs to an old epoch; must drop its doc
-  TOO_LARGE_DOC: 4002 // update would push document past the size limit
-})
+export { MSG_SYNC, MSG_AWARENESS, MSG_FROZEN, CLOSE }
 
 export const DEFAULT_LIMITS = Object.freeze({
   maxPayload: 256 * 1024, // ws frame limit -> close 1009
@@ -29,11 +23,32 @@ export const DEFAULT_LIMITS = Object.freeze({
 const ASSET_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 
 const SECURITY_HEADERS = {
-  'Content-Security-Policy': "default-src 'self'; connect-src 'self' ws:; img-src 'self' data:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'",
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
   'Cache-Control': 'no-store'
 }
+
+/**
+ * CSP for the guest page. `host` is the already-allowlisted Host header.
+ * The nonce exists only because CodeMirror injects <style> elements (EditorView.cspNonce).
+ * connect-src names the exact ws origin: Safari doesn't reliably treat 'self' as covering ws:.
+ */
+export function pageCsp (host, nonce) {
+  return [
+    "default-src 'self'",
+    "script-src 'self'",
+    `style-src 'self' 'nonce-${nonce}'`,
+    `connect-src ws://${host}`,
+    "img-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'none'"
+  ].join('; ')
+}
+
+const ASSET_HEADERS = { ...SECURITY_HEADERS, 'Cache-Control': 'public, max-age=31536000, immutable' }
 
 function rejectUpgrade (socket, status, text) {
   socket.end(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`)
@@ -45,7 +60,7 @@ export class SyncServer extends EventEmitter {
    * @param {object} opts
    * @param {() => string[]} opts.allowedHosts  current allowlist of "host:port" values (recomputed per request)
    * @param {Map<string,{type:string,body:Buffer|string}>} [opts.assets]  fixed, prebuilt assets
-   * @param {(session:any)=>string} [opts.renderIndex]  index HTML for the current session
+   * @param {(session:any, ctx:{nonce:string})=>string} [opts.renderIndex]  index HTML for the current session
    * @param {Partial<typeof DEFAULT_LIMITS>} [opts.limits]
    */
   constructor ({ allowedHosts, assets = new Map(), renderIndex, limits = {} }) {
@@ -98,11 +113,14 @@ export class SyncServer extends EventEmitter {
       this.#closeAll(CLOSE.STOPPED, 'sharing stopped')
       this.#detachSession()
     }
+    const onFrozen = () => this.#broadcast(session.epoch, frozenMessage(), null)
     session.on('epoch', onEpoch)
     session.on('stopped', onStopped)
+    session.on('frozen', onFrozen)
     this.#unbindSession = () => {
       session.off('epoch', onEpoch)
       session.off('stopped', onStopped)
+      session.off('frozen', onFrozen)
     }
     this.#bindDoc(session)
   }
@@ -166,8 +184,8 @@ export class SyncServer extends EventEmitter {
   }
 
   #onRequest (req, res) {
-    const send = (status, type, body) => {
-      res.writeHead(status, { ...SECURITY_HEADERS, 'Content-Type': type, 'Content-Length': Buffer.byteLength(body) })
+    const send = (status, type, body, headers = SECURITY_HEADERS) => {
+      res.writeHead(status, { ...headers, 'Content-Type': type, 'Content-Length': Buffer.byteLength(body) })
       res.end(req.method === 'HEAD' ? undefined : body)
     }
     if (!this.#hostAllowed(req)) return send(421, 'text/plain; charset=utf-8', 'Misdirected Request')
@@ -179,14 +197,18 @@ export class SyncServer extends EventEmitter {
     const path = q === -1 ? raw : raw.slice(0, q)
 
     if (path === '/') {
-      if (!this.session) return send(404, 'text/plain; charset=utf-8', 'Not Found')
-      return send(200, 'text/html; charset=utf-8', this.renderIndex(this.session))
+      if (!this.session) {
+        return send(404, 'text/html; charset=utf-8', '<!doctype html><meta charset="utf-8"><title>Not shared</title><p>This document is not being shared right now.</p>')
+      }
+      const nonce = randomBytes(16).toString('base64')
+      const headers = { ...SECURITY_HEADERS, 'Content-Security-Policy': pageCsp(req.headers.host.toLowerCase(), nonce) }
+      return send(200, 'text/html; charset=utf-8', this.renderIndex(this.session, { nonce }), headers)
     }
     if (path.startsWith('/assets/')) {
       const name = path.slice('/assets/'.length)
       if (ASSET_NAME.test(name) && !name.includes('..') && this.assets.has(name)) {
         const a = this.assets.get(name)
-        return send(200, a.type, a.body)
+        return send(200, a.type, a.body, ASSET_HEADERS)
       }
     }
     return send(404, 'text/plain; charset=utf-8', 'Not Found')
@@ -260,6 +282,7 @@ export class SyncServer extends EventEmitter {
       encoding.writeVarUint8Array(aenc, awarenessProtocol.encodeAwarenessUpdate(awareness, states))
       conn.send(encoding.toUint8Array(aenc))
     }
+    if (session.frozen) conn.send(frozenMessage())
     this.emit('connect', conn)
   }
 
@@ -312,7 +335,14 @@ export class Conn {
   }
 }
 
-function escapeHtml (s) {
+function frozenMessage () {
+  const enc = encoding.createEncoder()
+  encoding.writeVarUint(enc, MSG_FROZEN)
+  encoding.writeVarUint(enc, 1)
+  return encoding.toUint8Array(enc)
+}
+
+export function escapeHtml (s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 }
 

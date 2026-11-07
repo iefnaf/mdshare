@@ -8,8 +8,9 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import * as Y from 'yjs'
 import { Awareness } from 'y-protocols/awareness'
+import { TEXT_KEY } from './protocol.js'
 
-export const TEXT_KEY = 'md'
+export { TEXT_KEY }
 
 const newId = () => randomBytes(16).toString('base64url') // 128-bit
 

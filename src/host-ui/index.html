@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src data:; base-uri 'none'; form-action 'none'">
+<title>mdshare</title>
+<link rel="stylesheet" href="host.css">
+</head>
+<body>
+<main>
+  <section id="idle" class="view">
+    <div id="drop" class="drop" tabindex="0" role="button" aria-label="Drop a Markdown file here, or press Enter to choose one">
+      <div class="drop-icon" aria-hidden="true">⬇︎</div>
+      <p class="drop-title">Drop a Markdown file here</p>
+      <p class="drop-sub">or <button id="pick" class="link" type="button">choose a file…</button></p>
+    </div>
+    <p id="error" class="error" role="alert" hidden></p>
+  </section>
+
+  <section id="sharing" class="view" hidden>
+    <p class="label">Sharing</p>
+    <h1 id="basename" class="basename"></h1>
+
+    <div id="frozen" class="frozen" role="alert" hidden>
+      <strong>The file was changed outside mdshare.</strong>
+      Editing is paused for everyone and nothing has been overwritten. Choosing which version to keep is coming in a later version — for now, stop sharing and share the file again.
+    </div>
+
+    <img id="qr" class="qr" alt="QR code for the share link">
+    <p class="hint">On the same Wi-Fi, scan the code or open:</p>
+    <div class="url-row">
+      <code id="url" class="url"></code>
+      <button id="copy" type="button">Copy</button>
+    </div>
+    <p id="ip-row" class="ip" hidden>If that doesn’t open, try <code id="ip-url"></code></p>
+
+    <button id="stop" class="stop" type="button">Stop sharing</button>
+
+    <p class="disclosure">
+      Sharing uses unencrypted HTTP. Anyone on this Wi-Fi could read the document and the link. Use only on networks you trust.
+    </p>
+  </section>
+</main>
+<script src="host.js"></script>
+</body>
+</html>
