@@ -139,36 +139,41 @@ export class SyncServer extends EventEmitter {
   /** Broadcast doc + awareness updates of the current epoch to its connections. */
   #bindDoc (session) {
     this.#unbindDoc()
-    const { doc, awareness, epoch } = session
-    const onUpdate = (update, origin) => {
-      const enc = encoding.createEncoder()
-      encoding.writeVarUint(enc, MSG_SYNC)
-      syncProtocol.writeUpdate(enc, update)
-      this.#broadcast(epoch, encoding.toUint8Array(enc), origin)
-    }
-    const onAwareness = ({ added, updated, removed }, origin) => {
-      const changed = added.concat(updated, removed)
-      if (origin instanceof Conn) {
-        // remember which client ids a connection controls, to clean up on close
-        for (const id of added) origin.awarenessIds.add(id)
-        for (const id of removed) origin.awarenessIds.delete(id)
+    const unbind = []
+    for (const resource of session.documents.values()) {
+      const { doc, awareness, id } = resource
+      const { epoch } = session
+      const onUpdate = (update, origin) => {
+        const enc = encoding.createEncoder()
+        encoding.writeVarUint(enc, MSG_SYNC)
+        syncProtocol.writeUpdate(enc, update)
+        this.#broadcast(epoch, encoding.toUint8Array(enc), origin, id)
       }
-      const enc = encoding.createEncoder()
-      encoding.writeVarUint(enc, MSG_AWARENESS)
-      encoding.writeVarUint8Array(enc, awarenessProtocol.encodeAwarenessUpdate(awareness, changed))
-      this.#broadcast(epoch, encoding.toUint8Array(enc), null)
+      const onAwareness = ({ added, updated, removed }, origin) => {
+        const changed = added.concat(updated, removed)
+        if (origin instanceof Conn) {
+          // remember which client ids a connection controls, to clean up on close
+          for (const id of added) origin.awarenessIds.add(id)
+          for (const id of removed) origin.awarenessIds.delete(id)
+        }
+        const enc = encoding.createEncoder()
+        encoding.writeVarUint(enc, MSG_AWARENESS)
+        encoding.writeVarUint8Array(enc, awarenessProtocol.encodeAwarenessUpdate(awareness, changed))
+        this.#broadcast(epoch, encoding.toUint8Array(enc), null, id)
+      }
+      doc.on('update', onUpdate)
+      awareness.on('update', onAwareness)
+      unbind.push(() => {
+        doc.off('update', onUpdate)
+        awareness.off('update', onAwareness)
+      })
     }
-    doc.on('update', onUpdate)
-    awareness.on('update', onAwareness)
-    this.#unbindDoc = () => {
-      doc.off('update', onUpdate)
-      awareness.off('update', onAwareness)
-    }
+    this.#unbindDoc = () => unbind.forEach(fn => fn())
   }
 
-  #broadcast (epoch, msg, except) {
+  #broadcast (epoch, msg, except, fileId) {
     for (const c of this.conns) {
-      if (c.epoch === epoch && c !== except) c.send(msg)
+      if (c.epoch === epoch && c !== except && (!fileId || c.fileId === fileId)) c.send(msg)
     }
   }
 
@@ -231,31 +236,35 @@ export class SyncServer extends EventEmitter {
 
     const session = this.session
     if (!session || !session.checkToken(url.searchParams.get('t'))) return rejectUpgrade(socket, 401, 'Unauthorized')
+    const epoch = url.searchParams.get('e')
+    const fileId = url.searchParams.get('f') ?? session.files[0].id
+    const resource = session.documents.get(fileId)
+    if (session.checkEpoch(epoch) && !resource) return rejectUpgrade(socket, 404, 'Not Found')
     if (this.conns.size >= this.limits.maxConnections) return rejectUpgrade(socket, 503, 'Service Unavailable')
 
-    const epoch = url.searchParams.get('e')
     this.wss.handleUpgrade(req, socket, head, ws => {
       // Epoch is checked after upgrade so the browser sees a readable close code.
       if (!session.checkEpoch(epoch)) {
         ws.close(CLOSE.STALE_EPOCH, 'stale epoch')
         return
       }
-      this.#onConnection(ws, session)
+      this.#onConnection(ws, session, resource)
     })
   }
 
   // ---- Sync protocol ------------------------------------------------------------
 
-  #onConnection (ws, session) {
+  #onConnection (ws, session, resource) {
     const conn = new Conn(ws, session.epoch)
+    conn.fileId = resource.id
     this.conns.add(conn)
-    const { doc, awareness } = session
+    const { doc, awareness } = resource
 
     ws.on('message', (data, isBinary) => {
       if (!isBinary) return // protocol is binary only
       if (session.stopped || conn.epoch !== session.epoch) return
       try {
-        this.#onMessage(conn, session, new Uint8Array(data))
+        this.#onMessage(conn, session, resource, new Uint8Array(data))
       } catch (err) {
         this.emit('protocol-error', err)
         ws.close(1002, 'protocol error')
@@ -286,7 +295,7 @@ export class SyncServer extends EventEmitter {
     this.emit('connect', conn)
   }
 
-  #onMessage (conn, session, buf) {
+  #onMessage (conn, session, resource, buf) {
     const dec = decoding.createDecoder(buf)
     const type = decoding.readVarUint(dec)
     if (type === MSG_SYNC) {
@@ -296,7 +305,7 @@ export class SyncServer extends EventEmitter {
         const enc = encoding.createEncoder()
         encoding.writeVarUint(enc, MSG_SYNC)
         encoding.writeVarUint(enc, syncProtocol.messageYjsSyncStep2)
-        encoding.writeVarUint8Array(enc, Y.encodeStateAsUpdate(session.doc, sv))
+        encoding.writeVarUint8Array(enc, Y.encodeStateAsUpdate(resource.doc, sv))
         conn.send(encoding.toUint8Array(enc))
       } else if (sub === syncProtocol.messageYjsSyncStep2 || sub === syncProtocol.messageYjsUpdate) {
         const update = decoding.readVarUint8Array(dec)
@@ -305,18 +314,18 @@ export class SyncServer extends EventEmitter {
           return
         }
         // Conservative bound: an update can add at most ~its byte length in characters.
-        const current = session.doc.getText(TEXT_KEY).length
+        const current = resource.doc.getText(TEXT_KEY).length
         if (current + update.byteLength > this.limits.maxDocChars) {
           this.emit('dropped-update', { conn, reason: 'too-large' })
           conn.ws.close(CLOSE.TOO_LARGE_DOC, 'document too large')
           return
         }
-        Y.applyUpdate(session.doc, update, conn)
+        Y.applyUpdate(resource.doc, update, conn)
       } else {
         throw new Error(`unknown sync message ${sub}`)
       }
     } else if (type === MSG_AWARENESS) {
-      awarenessProtocol.applyAwarenessUpdate(session.awareness, decoding.readVarUint8Array(dec), conn)
+      awarenessProtocol.applyAwarenessUpdate(resource.awareness, decoding.readVarUint8Array(dec), conn)
     } else {
       throw new Error(`unknown message type ${type}`)
     }

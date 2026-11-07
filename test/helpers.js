@@ -43,11 +43,11 @@ export function wsWithOrigin (origin) {
 }
 
 /** A real y-websocket client (same library the guest browser will use). */
-export function client (ctx, { epoch = ctx.host.session.epoch, token = ctx.host.session.editToken, connect = true } = {}) {
+export function client (ctx, { epoch = ctx.host.session.epoch, token = ctx.host.session.editToken, connect = true, fileId } = {}) {
   const doc = new Y.Doc()
   const provider = new WebsocketProvider(`ws://${ctx.hostHeader}`, 'ws', doc, {
     WebSocketPolyfill: wsWithOrigin(ctx.origin),
-    params: { e: epoch, t: token },
+    params: { e: epoch, t: token, ...(fileId ? { f: fileId } : {}) },
     connect,
     disableBc: true, // BroadcastChannel would sync docs in-process and bypass the server
     resyncInterval: -1,

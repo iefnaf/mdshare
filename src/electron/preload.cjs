@@ -2,9 +2,10 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron')
 
 contextBridge.exposeInMainWorld('mdshare', {
-  pick: () => ipcRenderer.invoke('share:pick'),
+  pick: () => ipcRenderer.invoke('share:pick', false),
+  pickFolder: () => ipcRenderer.invoke('share:pick', true),
   // Electron 32+: File.path is gone; webUtils resolves the real path of a dropped file.
-  shareDropped: file => ipcRenderer.invoke('share:path', webUtils.getPathForFile(file)),
+  shareDropped: files => ipcRenderer.invoke('share:paths', files.map(file => webUtils.getPathForFile(file))),
   stop: () => ipcRenderer.invoke('share:stop'),
   info: () => ipcRenderer.invoke('share:info'),
   copy: text => ipcRenderer.invoke('share:copy', text),
